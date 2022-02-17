@@ -11,6 +11,7 @@ import "./libraries/DateTimeLibrary.sol";
 
 contract PriceFeedV1 is Initializable, PausableUpgradeable, OwnableUpgradeable {
     using DateTimeLibrary for uint256;
+    using Storage for Storage.PriceSet;
 
     uint64 public yearEpoch;
     uint64 private yearDuration;
@@ -18,6 +19,8 @@ contract PriceFeedV1 is Initializable, PausableUpgradeable, OwnableUpgradeable {
 
     event submitPriceEvent(address indexed asset,uint128 price,uint256 time);
     
+    mapping(address => mapping(uint256 => Storage.PriceSet)) private _prices;
+
     function initialize() initializer public {
         __Pausable_init();
         __Ownable_init();
@@ -26,6 +29,7 @@ contract PriceFeedV1 is Initializable, PausableUpgradeable, OwnableUpgradeable {
         yearDuration = 31536000;
         currentYear = 2022;
     }
+
 
     modifier yearSlot() {
         while(yearEpoch + yearDuration < block.timestamp) {
@@ -55,11 +59,11 @@ contract PriceFeedV1 is Initializable, PausableUpgradeable, OwnableUpgradeable {
         }
 
         return _year;
-    }
+    } 
 
     /**
      * @dev See {Asset Latest Price with the last updated Date}.
-     */  
+     */ 
     function getAssetPriceWithDate(
         address asset
     ) public view returns (
@@ -67,11 +71,10 @@ contract PriceFeedV1 is Initializable, PausableUpgradeable, OwnableUpgradeable {
         uint256 date,
         uint256 month,
         uint256 year) {
-        bytes32 slot = keccak256(abi.encodePacked(asset,getCurrentYear()));
-        (Storage.StoreSet memory data) = Storage.currentPriceWithTime(slot);
+        (Storage.StoreSet memory data) = _prices[asset][getCurrentYear()].currentPriceWithTime();
         (uint _year, uint _month, uint _date,,,) = DateTimeLibrary.timestampToDateTime(data._timestamp);
         return (
-            data._currPrice,
+            data._price,
             _date,
             _month,
             _year
@@ -82,13 +85,12 @@ contract PriceFeedV1 is Initializable, PausableUpgradeable, OwnableUpgradeable {
      * @dev See {Latest Asset Price}.
      */  
     function getAssetPrice(address asset) external view returns (uint256) {
-        bytes32 slot = keccak256(abi.encodePacked(asset,getCurrentYear()));
-        return Storage.currentPrice(slot);
+        return _prices[asset][getCurrentYear()].currentPrice();
     }
 
     /**
      * @dev See {Get Epoch}.
-     */  
+     */          
     function getEpoch(uint256 year,uint256 month,uint256 day) external pure returns (uint256 timeStamp) {
         return  DateTimeLibrary.timestampFromDate(year,month,day);
     }
@@ -103,16 +105,15 @@ contract PriceFeedV1 is Initializable, PausableUpgradeable, OwnableUpgradeable {
         uint64 startMonthYear,
         uint64 endMonthYear
     ) external view returns (uint256) {
-        require(startMonth > 0 && endMonth < 13, "Invalid Month Data");
+        require((startMonth > 0 && startMonth < 13) && (endMonth > 0 && endMonth < 13), "Invalid Month Data");
         require(startMonthYear <= endMonthYear ,"Invalid Year Data");
 
         (endMonthYear,endMonth) = endMonth == 12 ? (endMonthYear + 1, 1) : (endMonthYear, endMonth + 1);
+
         
-        bytes32 startYoke = keccak256(abi.encodePacked(asset,startMonthYear));
-        bytes32 endYoke = keccak256(abi.encodePacked(asset,endMonthYear));
         return (Storage.filter(
-            startYoke,
-            endYoke,
+            _prices[asset][startMonthYear],
+            _prices[asset][endMonthYear],
             DateTimeLibrary.timestampFromDate(startMonthYear,startMonth,1), 
             DateTimeLibrary.timestampFromDate(endMonthYear,endMonth,1)
             ));
@@ -122,16 +123,17 @@ contract PriceFeedV1 is Initializable, PausableUpgradeable, OwnableUpgradeable {
      * @dev See {Get the average price of asset by epoch basics}.
      */ 
     function getAveragePriceWithTimeStamp(
-        bytes32 startYoke,
-        bytes32 endYoke,
+        address asset,
+        uint64 startMonthYear,
+        uint64 endMonthYear,
         uint256 startEpoch,
         uint256 endEpoch
     ) external view returns (uint256) {
         require(startEpoch < endEpoch ,"Invalid Epoch Data");
-
+        
         return (Storage.filter(
-            startYoke,
-            endYoke,
+            _prices[asset][startMonthYear],
+            _prices[asset][endMonthYear],
             startEpoch, 
             endEpoch));
     } 
@@ -147,13 +149,12 @@ contract PriceFeedV1 is Initializable, PausableUpgradeable, OwnableUpgradeable {
         uint128 price,
         uint256 month,
         uint256 day,
-        uint64 year) external whenNotPaused yearSlot {
-        require(DateTimeLibrary.isValidDate(year,month,day),"Time is invalid");
-
-        bytes32 slot = keccak256(abi.encodePacked(asset,year));
+        uint64 year
+    ) external yearSlot whenNotPaused{
+         require(DateTimeLibrary.isValidDate(year,month,day),"Time is invalid");
+        _prices[asset][year].update(price,uint64(DateTimeLibrary.timestampFromDate(year,month,day)));
         console.log("Current Year", getCurrentYear());
-        Storage.update(slot,price,uint64(DateTimeLibrary.timestampFromDate(year,month,day)));
-
         emit submitPriceEvent(asset,price,block.timestamp);
     }
+
 }
