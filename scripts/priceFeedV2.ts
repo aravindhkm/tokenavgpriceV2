@@ -6,10 +6,12 @@
 import { ethers } from "hardhat";
 const hre = require("hardhat");
 const { getSelectors,getSelector, FacetCutAction } = require('./libraries/diamond.js');
-const fs = require('fs');
+const fs = require('fs');  
+const { BN, constants, expectEvent, expectRevert } = require('@openzeppelin/test-helpers');
+const { ZERO_ADDRESS } = constants;
 
 
-async function main() {
+async function priceFeedV2() {
   // Hardhat always runs the compile task when running scripts with its command
   // line interface.
   //
@@ -18,14 +20,14 @@ async function main() {
   // await hre.run('compile');
 
   // We get the contract to deploy
-  const diamondAddress = fs.readFileSync('./DeployAddress.txt', 'utf-8');
+  const diamondAddress = fs.readFileSync('./Diamond.txt', 'utf-8');
   const diamondCut = await ethers.getContractAt('IDiamondCut', diamondAddress)
 
   const PriceFeedV2 = await ethers.getContractFactory("PriceFeedV2");
   const priceV2 = await PriceFeedV2.deploy();
 
 
-  console.log("getSelectors", getSelectors(priceV2));
+  // console.log("getSelectors", getSelectors(priceV2));
 
 
   await priceV2.deployed();
@@ -47,22 +49,31 @@ async function main() {
     functionSelectors: getSelectors(priceV2)
   })
 
-  const zeroAddress = "0x0000000000000000000000000000000000000000";
   let functionCall = priceV2.interface.encodeFunctionData('initialize')
-  tx = await diamondCut.diamondCut(cut, zeroAddress, "")
+  tx = await diamondCut.diamondCut(cut, ZERO_ADDRESS, "0x")
   console.log('Diamond cut tx: ', tx.hash)
   receipt = await tx.wait()
   if (!receipt.status) {
     throw Error(`Diamond upgrade failed: ${tx.hash}`)
   }
   console.log('Completed diamond cut')
+
+
+  return priceV2.address;
 }
 
 // We recommend this pattern to be able to use async/await everywhere
 // and properly handle errors.
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+
+if (require.main === module) {
+  priceFeedV2()
+    .then(() => process.exit(0))
+    .catch(error => {
+      console.error(error)
+      process.exit(1)
+    })
+}
+
+exports.priceFeedV2 = priceFeedV2
 
 

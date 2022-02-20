@@ -9,7 +9,7 @@ const { getSelectors, FacetCutAction } = require('./libraries/diamond.js');
 const fs = require('fs');
 
 
-async function main() {
+async function priceFeedV1() {
   // Hardhat always runs the compile task when running scripts with its command
   // line interface.
   //
@@ -18,14 +18,14 @@ async function main() {
   // await hre.run('compile');
 
   // We get the contract to deploy
-  const diamondAddress = fs.readFileSync('./DeployAddress.txt', 'utf-8');
+  const diamondAddress = fs.readFileSync('./Diamond.txt', 'utf-8');
   const diamondCut = await ethers.getContractAt('IDiamondCut', diamondAddress)
 
   const PriceFeedV1 = await ethers.getContractFactory("PriceFeedV1");
   const priceV1 = await PriceFeedV1.deploy();
 
 
-  console.log("getSelectors", getSelectors(priceV1));
+  // console.log("getSelectors", getSelectors(priceV1));
 
 
   await priceV1.deployed();
@@ -53,15 +53,28 @@ async function main() {
   if (!receipt.status) {
     throw Error(`Diamond upgrade failed: ${tx.hash}`)
   }
-  console.log('Completed diamond cut')
+  console.log('Completed priceFeedV1', priceV1.address)
+  saveDeployedContractAddress(priceV1.address);
 
+  return priceV1.address;
 }
+
+async function saveDeployedContractAddress(s: string) {
+  fs.writeFileSync('./PriceFeed.txt', s);
+}
+
 
 // We recommend this pattern to be able to use async/await everywhere
 // and properly handle errors.
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
 
+if (require.main === module) {
+  priceFeedV1()
+    .then(() => process.exit(0))
+    .catch(error => {
+      console.error(error)
+      process.exit(1)
+    })
+}
+
+exports.priceFeedV1 = priceFeedV1
 

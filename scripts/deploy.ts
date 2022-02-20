@@ -78,7 +78,7 @@ async function deployDiamond () {
 
   // upgrade diamond with facets
   console.log('')
-  console.log('Diamond Cut:', cut)
+  // console.log('Diamond Cut:', cut)
   const diamondCut = await ethers.getContractAt('IDiamondCut', diamond.address)
   let tx
   let receipt
@@ -97,7 +97,7 @@ async function deployDiamond () {
 }
 
 async function saveDeployedContractAddress(s: string) {
-  fs.writeFileSync('./DeployAddress.txt', s);
+  fs.writeFileSync('./Diamond.txt', s);
 }
 
 

@@ -5,11 +5,13 @@
 // Runtime Environment's members available in the global scope.
 import { ethers } from "hardhat";
 const hre = require("hardhat");
-const { getSelectors, FacetCutAction } = require('./libraries/diamond.js');
+const { getSelectors, getSelector,get,FacetCutAction } = require('./libraries/diamond.js');
 const fs = require('fs');
+const { BN, constants, expectEvent, expectRevert } = require('@openzeppelin/test-helpers');
+const { ZERO_ADDRESS } = constants;
 
 
-async function main() {
+async function priceFeedV3() {
   // Hardhat always runs the compile task when running scripts with its command
   // line interface.
   //
@@ -18,14 +20,14 @@ async function main() {
   // await hre.run('compile');
 
   // We get the contract to deploy
-  const diamondAddress = fs.readFileSync('./DeployAddress.txt', 'utf-8');
+  const diamondAddress = fs.readFileSync('./Diamond.txt', 'utf-8');
   const diamondCut = await ethers.getContractAt('IDiamondCut', diamondAddress)
 
   const PriceFeedV3 = await ethers.getContractFactory("PriceFeedV3");
   const priceV3 = await PriceFeedV3.deploy();
 
 
-  console.log("getSelectors", getSelectors(priceV3));
+ // console.log("getSelectors", getSelectors(priceV3));
 
 
   await priceV3.deployed();
@@ -42,13 +44,12 @@ async function main() {
 
   cut.push({
     facetAddress: priceV3.address,
-    action: FacetCutAction.Replace,
-    functionSelectors: getSelectors(priceV3)
+    action: FacetCutAction.Add,
+    functionSelectors: ["0x58f9dcc0"]
   })
 
-  const zeroAddress = "0x0000000000000000000000000000000000000000";
   let functionCall = priceV3.interface.encodeFunctionData('initialize')
-  tx = await diamondCut.diamondCut(cut, zeroAddress, "")
+  tx = await diamondCut.diamondCut(cut, ZERO_ADDRESS, "0x")
   console.log('Diamond cut tx: ', tx.hash)
   receipt = await tx.wait()
   if (!receipt.status) {
@@ -56,13 +57,20 @@ async function main() {
   }
   console.log('Completed diamond cut')
 
+  return priceV3.address;
+
 }
 
 // We recommend this pattern to be able to use async/await everywhere
 // and properly handle errors.
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
 
+if (require.main === module) {
+  priceFeedV3()
+    .then(() => process.exit(0))
+    .catch(error => {
+      console.error(error)
+      process.exit(1)
+    })
+}
 
+exports.priceFeedV3 = priceFeedV3
